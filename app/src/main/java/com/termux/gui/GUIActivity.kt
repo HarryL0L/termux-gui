@@ -11,7 +11,9 @@ import android.view.WindowInsets
 import android.view.WindowManager
 import android.webkit.WebView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.google.gson.JsonElement
 import java.io.Serializable
 import java.util.*
@@ -75,10 +77,39 @@ open class GUIActivity : AppCompatActivity() {
      */
     var listener: Listener? = null
 
+    private var fullscreen = true
+
+    fun setFullscreen(enabled: Boolean) {
+        fullscreen = enabled
+        WindowCompat.setDecorFitsSystemWindows(window, !enabled)
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (enabled) {
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                window.attributes = window.attributes.apply {
+                    layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                    } else {
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                    }
+                }
+            }
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                window.attributes = window.attributes.apply {
+                    layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+                }
+            }
+        }
+    }
+
     @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Logger.log(2, TAG, "oncreate activity")
+        setFullscreen(true)
         if (intent.getBooleanExtra(PIP_KEY, false)) {
             Logger.log(2, TAG, "pip")
             setTheme(R.style.Theme_TermuxGUI_NoAnimation)
@@ -101,6 +132,15 @@ open class GUIActivity : AppCompatActivity() {
         window.decorView.setOnApplyWindowInsetsListener { v, insets ->
             listener?.onInsetChange(this, WindowInsetsCompat.toWindowInsetsCompat(insets, v))
             v.onApplyWindowInsets(insets)
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && fullscreen) {
+            val controller = WindowInsetsControllerCompat(window, window.decorView)
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
         }
     }
 
