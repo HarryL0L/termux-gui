@@ -13,6 +13,7 @@ import android.opengl.EGLSurface
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.os.Build
+import android.util.Log
 import android.view.Choreographer
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -25,7 +26,6 @@ import java.lang.RuntimeException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.Charset
-import android.util.Log
 
 /**
  * A SurfaceView that can draw a shared HardwareBuffer to the Surface.
@@ -198,15 +198,7 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                 }
                 
                 initGLES()
-                if (!EGL14.eglMakeCurrent(disp, eglSurface, eglSurface, gl)
-
-        Log.i("TermuxGUI-GLES", "EGL_VERSION = ${EGL14.eglQueryString(eglDisplay, EGL14.EGL_VERSION)}")
-        Log.i("TermuxGUI-GLES", "EGL_VENDOR = ${EGL14.eglQueryString(eglDisplay, EGL14.EGL_VENDOR)}")
-        Log.i("TermuxGUI-GLES", "GL_VENDOR = ${GLES31.glGetString(GLES31.GL_VENDOR)}")
-        Log.i("TermuxGUI-GLES", "GL_RENDERER = ${GLES31.glGetString(GLES31.GL_RENDERER)}")
-        Log.i("TermuxGUI-GLES", "GL_VERSION = ${GLES31.glGetString(GLES31.GL_VERSION)}")
-        Log.i("TermuxGUI-GLES", "GLSL = ${GLES31.glGetString(GLES31.GL_SHADING_LANGUAGE_VERSION)}")
-) {
+                if (!EGL14.eglMakeCurrent(disp, eglSurface, eglSurface, gl)) {
                     val err = EGL14.eglGetError()
                     if (err == EGL14.EGL_CONTEXT_LOST) {
                         EGL14.eglDestroyContext(disp, gl)
@@ -392,6 +384,12 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                 deinitEGL()
                 throw RuntimeException("Could not make GLES3 context current: 0x%x".format(err))
             }
+            Log.i("TermuxGUI-GLES", "EGL_VERSION = ${EGL14.eglQueryString(disp, EGL14.EGL_VERSION)}")
+            Log.i("TermuxGUI-GLES", "EGL_VENDOR = ${EGL14.eglQueryString(disp, EGL14.EGL_VENDOR)}")
+            Log.i("TermuxGUI-GLES", "GL_VENDOR = ${GLES20.glGetString(GLES20.GL_VENDOR)}")
+            Log.i("TermuxGUI-GLES", "GL_RENDERER = ${GLES20.glGetString(GLES20.GL_RENDERER)}")
+            Log.i("TermuxGUI-GLES", "GL_VERSION = ${GLES20.glGetString(GLES20.GL_VERSION)}")
+            Log.i("TermuxGUI-GLES", "GLSL = ${GLES20.glGetString(GLES20.GL_SHADING_LANGUAGE_VERSION)}")
             val version = GLES20.glGetString(GLES20.GL_VERSION) ?: ""
             val versionMatch = Regex("OpenGL ES (\\d+)\\.(\\d+)").find(version)
             val majorVersion = versionMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
