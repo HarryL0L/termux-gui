@@ -7,6 +7,7 @@ import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.EGLContext
 import android.opengl.EGLDisplay
+import android.opengl.EGLExt
 import android.opengl.EGLObjectHandle
 import android.opengl.EGLSurface
 import android.opengl.GLES11Ext
@@ -206,7 +207,7 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                         initEGL()
                         initGLES()
                     } else {
-                        throw RuntimeException("Could not make GLES2 context current: 0x%x".format(err))
+                        throw RuntimeException("Could not make GLES3 context current: 0x%x".format(err))
                     }
                 }
                 if (surfaceChanged) {
@@ -334,22 +335,45 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                 deinitEGL()
                 throw RuntimeException("Could not bind GLES: 0x%x".format(err))
             }
-            gl = EGL14.eglCreateContext(
-                disp, eglConfig, EGL14.EGL_NO_CONTEXT, intArrayOf(
-                    EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
-                    EGL14.EGL_NONE
-                ), 0
-            )
+            val eglExtensions = EGL14.eglQueryString(disp, EGL14.EGL_EXTENSIONS) ?: ""
+            val contextVersions = if (eglExtensions.contains("EGL_KHR_create_context")) {
+                listOf(
+                    intArrayOf(
+                        EGLExt.EGL_CONTEXT_MAJOR_VERSION_KHR, 3,
+                        EGLExt.EGL_CONTEXT_MINOR_VERSION_KHR, 2,
+                        EGL14.EGL_NONE
+                    ),
+                    intArrayOf(
+                        EGLExt.EGL_CONTEXT_MAJOR_VERSION_KHR, 3,
+                        EGLExt.EGL_CONTEXT_MINOR_VERSION_KHR, 1,
+                        EGL14.EGL_NONE
+                    )
+                )
+            } else {
+                listOf(
+                    intArrayOf(
+                        EGL14.EGL_CONTEXT_CLIENT_VERSION, 3,
+                        EGL14.EGL_NONE
+                    )
+                )
+            }
+            for (attribs in contextVersions) {
+                gl = EGL14.eglCreateContext(
+                    disp, eglConfig, EGL14.EGL_NO_CONTEXT, attribs, 0
+                )
+                if (gl != EGL14.EGL_NO_CONTEXT)
+                    break
+            }
             if (gl == EGL14.EGL_NO_CONTEXT) {
                 val err = EGL14.eglGetError()
                 deinitEGL()
-                throw RuntimeException("Could not create GLES2 context: 0x%x".format(err))
+                throw RuntimeException("Could not create OpenGL ES 3.1+ context: 0x%x".format(err))
             }
             if (eglSurface != EGL14.EGL_NO_SURFACE) {
                 if (!EGL14.eglMakeCurrent(disp, eglSurface, eglSurface, gl)) {
                     val err = EGL14.eglGetError()
                     deinitEGL()
-                    throw RuntimeException("Could not make GLES2 context current: 0x%x".format(err))
+                    throw RuntimeException("Could not make GLES3 context current: 0x%x".format(err))
                 }
             }
         }
@@ -357,17 +381,28 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
             if (!EGL14.eglMakeCurrent(disp, eglSurface, eglSurface, gl)) {
                 val err = EGL14.eglGetError()
                 deinitEGL()
-                throw RuntimeException("Could not make GLES2 context current: 0x%x".format(err))
+                throw RuntimeException("Could not make GLES3 context current: 0x%x".format(err))
+            }
+            val version = GLES20.glGetString(GLES20.GL_VERSION) ?: ""
+            val versionMatch = Regex("OpenGL ES (\\d+)\\.(\\d+)").find(version)
+            val majorVersion = versionMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            val minorVersion = versionMatch?.groupValues?.get(2)?.toIntOrNull() ?: 0
+            if (majorVersion != 3 || minorVersion < 1) {
+                deinitEGL()
+                throw RuntimeException("OpenGL ES 3.1 or newer is required: $version")
+            }
+            if (minorVersion > 2) {
+                println("OpenGL ES $majorVersion.$minorVersion detected; using the GLES 3.2 feature level")
             }
             val exts = GLES20.glGetString(GLES20.GL_EXTENSIONS)
-            logGLESError("get gles2 extensions")
+            logGLESError("get gles3 extensions")
             if (exts == null) {
                 deinitEGL()
-                throw RuntimeException("Could not query GLES2 extensions")
+                throw RuntimeException("Could not query GLES3 extensions")
             }
-            if (!exts.contains("GL_OES_EGL_image_external")) {
+            if (!exts.contains("GL_OES_EGL_image_external_essl3")) {
                 deinitEGL()
-                throw RuntimeException("GLES2 doesn't have the GL_OES_EGL_image_external extension")
+                throw RuntimeException("GLES3 doesn't have the GL_OES_EGL_image_external_essl3 extension")
             }
             if (buffer != null && bufferImage == EGLImageKHR.EGL_NO_IMAGE_KHR) {
                 createBufferImage()
@@ -566,7 +601,7 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                     EGL14.EGL_ALPHA_SIZE, 8,
                     EGL14.EGL_COLOR_BUFFER_TYPE, EGL14.EGL_RGB_BUFFER,
                     EGL14.EGL_SURFACE_TYPE, EGL14.EGL_WINDOW_BIT,
-                    EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
+                    EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES3_BIT_KHR,
                     EGL14.EGL_NONE
             ), 0, configs, 0, 1, numConfigs, 0)) {
                 deinitEGL()
