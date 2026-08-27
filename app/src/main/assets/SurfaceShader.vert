@@ -1,11 +1,12 @@
-#version 100
+#version 310 es
 
-attribute vec2 pos;
-attribute vec2 tpos;
+in vec2 pos;
+in vec2 tpos;
 
-varying vec2 vPos;
+out vec2 vPos;
 
 void main() {
     gl_Position = vec4(pos, 0.0, 1.0);
-    vPos = tpos;
+    vPos = tpos
+;
 }
