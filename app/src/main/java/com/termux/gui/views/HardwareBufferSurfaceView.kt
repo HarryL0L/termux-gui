@@ -25,6 +25,7 @@ import java.lang.RuntimeException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.Charset
+import android.util.Log
 
 /**
  * A SurfaceView that can draw a shared HardwareBuffer to the Surface.
@@ -197,7 +198,15 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                 }
                 
                 initGLES()
-                if (!EGL14.eglMakeCurrent(disp, eglSurface, eglSurface, gl)) {
+                if (!EGL14.eglMakeCurrent(disp, eglSurface, eglSurface, gl)
+
+        Log.i("TermuxGUI-GLES", "EGL_VERSION = ${EGL14.eglQueryString(eglDisplay, EGL14.EGL_VERSION)}")
+        Log.i("TermuxGUI-GLES", "EGL_VENDOR = ${EGL14.eglQueryString(eglDisplay, EGL14.EGL_VENDOR)}")
+        Log.i("TermuxGUI-GLES", "GL_VENDOR = ${GLES31.glGetString(GLES31.GL_VENDOR)}")
+        Log.i("TermuxGUI-GLES", "GL_RENDERER = ${GLES31.glGetString(GLES31.GL_RENDERER)}")
+        Log.i("TermuxGUI-GLES", "GL_VERSION = ${GLES31.glGetString(GLES31.GL_VERSION)}")
+        Log.i("TermuxGUI-GLES", "GLSL = ${GLES31.glGetString(GLES31.GL_SHADING_LANGUAGE_VERSION)}")
+) {
                     val err = EGL14.eglGetError()
                     if (err == EGL14.EGL_CONTEXT_LOST) {
                         EGL14.eglDestroyContext(disp, gl)
