@@ -601,7 +601,7 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                     EGL14.EGL_ALPHA_SIZE, 8,
                     EGL14.EGL_COLOR_BUFFER_TYPE, EGL14.EGL_RGB_BUFFER,
                     EGL14.EGL_SURFACE_TYPE, EGL14.EGL_WINDOW_BIT,
-                    EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES3_BIT_KHR,
+                    EGL14.EGL_RENDERABLE_TYPE, 0x00000040,
                     EGL14.EGL_NONE
             ), 0, configs, 0, 1, numConfigs, 0)) {
                 deinitEGL()
