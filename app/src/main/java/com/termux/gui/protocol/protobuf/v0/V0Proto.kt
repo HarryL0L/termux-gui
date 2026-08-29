@@ -437,6 +437,19 @@ class V0Proto(app: Context, private val eventQueue: LinkedBlockingQueue<Event>) 
             c.screenHeight = config.screenHeightDp
             c.fontscale = config.fontScale
             c.density = a.resources.displayMetrics.density
+            val display = a.display
+            if (display != null) {
+                val mode = display.mode
+                c.currentDisplayMode = GUIProt0.DisplayMode.newBuilder().setWidth(mode.physicalWidth).setHeight(mode.physicalHeight).setRefreshRate(mode.refreshRate).build()
+                display.supportedModes.forEach {
+                    c.addSupportedDisplayModes(GUIProt0.DisplayMode.newBuilder().setWidth(it.physicalWidth).setHeight(it.physicalHeight).setRefreshRate(it.refreshRate).build())
+                }
+                val hdr = display.hdrCapabilities
+                if (hdr != null) {
+                    c.hdrSupported = hdr.supportedHdrTypes.isNotEmpty()
+                    hdr.supportedHdrTypes.forEach { c.addHdrTypes(it) }
+                }
+            }
             return c
         }
     }
