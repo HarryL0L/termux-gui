@@ -13,6 +13,7 @@ import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.os.Build
 import android.view.Choreographer
+import android.view.MotionEvent
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -145,9 +146,36 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
     private val tposBuffer = ByteBuffer.allocateDirect(8*4)
     private var tposI = -1
     private var prog = -1
-    
-    
-    
+    private var hbSamplerI = -1
+    private var cursorSamplerI = -1
+    private var cursorRectI = -1
+    private var cursorSizeI = -1
+    private var cursorVisibleI = -1
+    private var cursorTexture = 0
+    private var cursorImage: ByteArray? = null
+    private var cursorWidth = 0
+    private var cursorHeight = 0
+    private var cursorHotspotX = 0
+    private var cursorHotspotY = 0
+    private var cursorX = 0f
+    private var cursorY = 0f
+    private var cursorVisible = false
+    private var cursorDirty = false
+    private var touchDownX = 0f
+    private var touchDownY = 0f
+    private var touchMoved = false
+    private var tapCount = 0
+    private var lastTapX = 0f
+    private var lastTapY = 0f
+    private var pendingTap = false
+    private val touchSlop = 24f
+
+    interface MouseListener {
+        fun onMouseEvent(action: Int, button: Int, x: Int, y: Int, time: Long)
+    }
+
+    var mouseListener: MouseListener? = null
+
     fun setBuffer(b: HardwareBuffer) {
         synchronized(RENDER_LOCK) {
             buffer = b
@@ -179,8 +207,107 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
     fun getBuffer(): HardwareBuffer? {
         return buffer
     }
-    
-    
+
+    fun setCursor(image: ByteArray, width: Int, height: Int, hotspotX: Int, hotspotY: Int, visible: Boolean) {
+        synchronized(RENDER_LOCK) {
+            if (width <= 0 || height <= 0 || image.size < width * height * 4) {
+                cursorVisible = false
+                cursorImage = null
+                cursorDirty = false
+            } else {
+                cursorImage = image
+                cursorWidth = width
+                cursorHeight = height
+                cursorHotspotX = hotspotX
+                cursorHotspotY = hotspotY
+                cursorVisible = visible
+                cursorDirty = true
+            }
+            if (disp != EGL14.EGL_NO_DISPLAY) {
+                render()
+            }
+        }
+    }
+
+    private fun emitMouse(action: Int, button: Int, x: Float, y: Float) {
+        mouseListener?.onMouseEvent(action, button, x.toInt(), y.toInt(), System.currentTimeMillis())
+    }
+
+    private fun emitClick(button: Int, x: Float, y: Float) {
+        emitMouse(0, button, x, y)
+        emitMouse(1, button, x, y)
+    }
+
+    private fun finishTap() {
+        pendingTap = false
+        when (tapCount) {
+            1 -> emitClick(1, lastTapX, lastTapY)
+            2 -> emitClick(2, lastTapX, lastTapY)
+        }
+        tapCount = 0
+    }
+
+    private val tapRunnable = Runnable { finishTap() }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                touchDownX = event.x
+                touchDownY = event.y
+                touchMoved = false
+                cursorX = event.x
+                cursorY = event.y
+                emitMouse(2, 0, event.x, event.y)
+                synchronized(RENDER_LOCK) { if (disp != EGL14.EGL_NO_DISPLAY) render() }
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                cursorX = event.x
+                cursorY = event.y
+                emitMouse(2, 0, event.x, event.y)
+                if (!touchMoved && ((event.x - touchDownX) * (event.x - touchDownX) + (event.y - touchDownY) * (event.y - touchDownY) > touchSlop * touchSlop)) {
+                    touchMoved = true
+                    removeCallbacks(tapRunnable)
+                    pendingTap = false
+                    tapCount = 0
+                }
+                synchronized(RENDER_LOCK) { if (disp != EGL14.EGL_NO_DISPLAY) render() }
+                return true
+            }
+            MotionEvent.ACTION_UP -> {
+                cursorX = event.x
+                cursorY = event.y
+                synchronized(RENDER_LOCK) { if (disp != EGL14.EGL_NO_DISPLAY) render() }
+                if (!touchMoved) {
+                    if (pendingTap && kotlin.math.abs(event.x - lastTapX) <= touchSlop && kotlin.math.abs(event.y - lastTapY) <= touchSlop) {
+                        tapCount++
+                    } else {
+                        tapCount = 1
+                    }
+                    lastTapX = event.x
+                    lastTapY = event.y
+                    pendingTap = true
+                    removeCallbacks(tapRunnable)
+                    if (tapCount == 3) {
+                        pendingTap = false
+                        tapCount = 0
+                        emitClick(3, event.x, event.y)
+                    } else {
+                        postDelayed(tapRunnable, 300)
+                    }
+                }
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(tapRunnable)
+                pendingTap = false
+                tapCount = 0
+                touchMoved = false
+                return true
+            }
+        }
+        return true
+    }
     
     private fun render() {
         synchronized(RENDER_LOCK) {
@@ -304,9 +431,28 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                 GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
                 logGLESError("glClear")
                 
+                GLES20.glUniform1f(cursorVisibleI, 0f)
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
                 logGLESError("drawArrays")
-                
+                if (cursorTexture != 0 && cursorImage != null && cursorVisible && cursorWidth > 0 && cursorHeight > 0) {
+                    if (cursorDirty) {
+                        uploadCursor()
+                    }
+                    GLES20.glUseProgram(prog)
+                    GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+                    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, cursorTexture)
+                    GLES20.glUniform1i(cursorSamplerI, 0)
+                    GLES20.glUniform2f(cursorSizeI, cursorWidth.toFloat(), cursorHeight.toFloat())
+                    GLES20.glUniform1f(cursorVisibleI, 1f)
+                    val left = cursorX - cursorHotspotX
+                    val top = cursorY - cursorHotspotY
+                    GLES20.glUniform4f(cursorRectI, left, surfaceHeight - top - cursorHeight, left + cursorWidth, surfaceHeight - top)
+                    GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+                    GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
+                    GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE1)
+                } else {
+                    GLES20.glUniform1f(cursorVisibleI, 0f)
+                }
                 EGL14.eglSwapBuffers(disp, eglSurface)
                 checkEGLError("swap buffers")
                 
@@ -422,10 +568,28 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                 GLES20.glUseProgram(prog)
                 logGLESError("use program")
             }
-            if (prog != -1 && bufferImage != EGLImageKHR.EGL_NO_IMAGE_KHR) {
-                val posS = GLES20.glGetUniformLocation(prog, "hbSampler")
-                logGLESError("glGetUniformLocation")
-                GLES20.glUniform1i(posS, 1)
+            if (prog != -1) {
+                hbSamplerI = GLES20.glGetUniformLocation(prog, "hbSampler")
+                cursorSamplerI = GLES20.glGetUniformLocation(prog, "cursorSampler")
+                cursorRectI = GLES20.glGetUniformLocation(prog, "cursorRect")
+                cursorSizeI = GLES20.glGetUniformLocation(prog, "cursorSize")
+                cursorVisibleI = GLES20.glGetUniformLocation(prog, "cursorVisible")
+                GLES20.glUniform1i(hbSamplerI, 1)
+                GLES20.glUniform1i(cursorSamplerI, 0)
+                if (cursorTexture == 0) {
+                    val textures = IntArray(1)
+                    GLES20.glGenTextures(1, textures, 0)
+                    cursorTexture = textures[0]
+                    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, cursorTexture)
+                    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST)
+                    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST)
+                    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+                    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+                    cursorDirty = cursorImage != null
+                }
+                if (cursorDirty) {
+                    uploadCursor()
+                }
             }
             if (posI == -1) {
                 posI = GLES20.glGetAttribLocation(prog, "pos")
@@ -445,7 +609,22 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
         }
     }
     
-    
+    private fun uploadCursor() {
+        val image = cursorImage ?: return
+        val size = cursorWidth.toLong() * cursorHeight.toLong() * 4L
+        if (cursorTexture == 0 || size > image.size) return
+        val pixels = ByteBuffer.allocateDirect(size.toInt()).order(ByteOrder.nativeOrder())
+        val row = cursorWidth * 4
+        for (y in 0 until cursorHeight) {
+            val offset = (cursorHeight - 1 - y) * row
+            pixels.put(image, offset, row)
+        }
+        pixels.position(0)
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, cursorTexture)
+        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, cursorWidth, cursorHeight, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pixels)
+        cursorDirty = false
+    }
     
     private val callback = object: SurfaceHolder.Callback, SurfaceHolder.Callback2 {
         override fun surfaceCreated(holder: SurfaceHolder) {
@@ -513,6 +692,13 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                 EGL14.eglMakeCurrent(disp, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
                 posI = -1
                 prog = -1
+                hbSamplerI = -1
+                cursorSamplerI = -1
+                cursorRectI = -1
+                cursorSizeI = -1
+                cursorVisibleI = -1
+                cursorTexture = 0
+                cursorDirty = cursorImage != null
             }
             if (eglSurface != EGL14.EGL_NO_SURFACE) {
                 EGL14.eglDestroySurface(disp, eglSurface)
