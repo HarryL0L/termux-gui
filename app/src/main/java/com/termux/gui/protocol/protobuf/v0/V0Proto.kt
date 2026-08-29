@@ -160,6 +160,7 @@ class V0Proto(app: Context, private val eventQueue: LinkedBlockingQueue<Event>) 
                     Method.MethodCase.DESTROYHARDWAREBUFFER -> handleBuffer.destroyHardwareBuffer(m.destroyHardwareBuffer)
                     Method.MethodCase.SETSURFACEBUFFER -> handleView.setSurfaceBuffer(m.setSurfaceBuffer)
                     Method.MethodCase.SURFACECONFIG -> handleView.surfaceConfig(m.surfaceConfig)
+                    Method.MethodCase.SURFACECURSOR -> handleView.surfaceCursor(m.setSurfaceCursor)
                     
                     Method.MethodCase.CREATEREMOTELAYOUT -> handleRemote.createLayout(m.createRemoteLayout)
                     Method.MethodCase.DELETEREMOTELAYOUT -> handleRemote.deleteLayout(m.deleteRemoteLayout)
