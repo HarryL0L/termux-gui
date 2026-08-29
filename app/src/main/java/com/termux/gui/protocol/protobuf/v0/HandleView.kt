@@ -765,6 +765,15 @@ class HandleView(val v: V0Proto, val main: OutputStream, val activities: Mutable
             it.success = false
         })
     }
+
+    fun surfaceCursor(m: SurfaceViewSetCursorRequest) {
+        handler.handleViewConnectionThread(m.v, SurfaceViewSetCursorResponse.newBuilder(), { ret, v: HardwareBufferSurfaceView, _, _ ->
+            v.setCursor(m.image.toByteArray(), m.width.toInt(), m.height.toInt(), m.hotspotX, m.hotspotY, m.visible)
+            ret.success = true
+        }, {
+            it.success = false
+        })
+    }
     
     
 }
