@@ -2601,6 +2601,21 @@ message SurfaceViewConfigRequest {
   
 }
 
+message SurfaceViewSetCursorRequest {
+  View v = 1;
+  bytes image = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  int32 hotspotX = 5;
+  int32 hotspotY = 6;
+  bool visible = 7;
+}
+
+message SurfaceViewSetCursorResponse {
+  bool success = 1;
+  Error code = 2;
+}
+
 message SurfaceViewConfigResponse {
   bool success = 1;
   Error code = 2;
@@ -2759,6 +2774,7 @@ message Method {
     DestroyHardwareBufferRequest destroyHardwareBuffer = 701;
     SurfaceViewSetBufferRequest setSurfaceBuffer = 702;
     SurfaceViewConfigRequest surfaceConfig = 703;
+    SurfaceViewSetCursorRequest setSurfaceCursor = 704;
     
     
   }
@@ -3072,9 +3088,26 @@ message OverlayScaleEvent {
   float span = 2;
 }
 
-/*
-Send when an ImageView or SurfaceView is set to use the keyboard.
- */
+message MouseEvent {
+  View v = 1;
+  enum Action {
+    down = 0;
+    up = 1;
+    move = 2;
+  }
+  enum Button {
+    none = 0;
+    left = 1;
+    right = 2;
+    middle = 3;
+  }
+  Action action = 2;
+  Button button = 3;
+  int32 x = 4;
+  int32 y = 5;
+  uint64 time = 6;
+}
+
 message KeyEvent {
   enum Modifier {
     MOD_NONE = 0;
@@ -3220,6 +3253,7 @@ message Event {
     VolumeKeyEvent volume = 50;
     InsetEvent inset = 51;
     SurfaceViewSurfaceChangedEvent surfaceChanged = 52;
+    MouseEvent mouse = 53;
     
     // Debug events
     
