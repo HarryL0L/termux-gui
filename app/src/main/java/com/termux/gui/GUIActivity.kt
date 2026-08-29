@@ -217,6 +217,15 @@ open class GUIActivity : AppCompatActivity() {
         m["screenheight"] = c.screenHeightDp
         m["fontscale"] = c.fontScale
         m["density"] = resources.displayMetrics.density
+        val display = this.display
+        if (display != null) {
+            val mode = display.mode
+            m["current_mode"] = mapOf("width" to mode.physicalWidth, "height" to mode.physicalHeight, "refresh_rate" to mode.refreshRate)
+            m["supported_modes"] = display.supportedModes.map { mapOf("width" to it.physicalWidth, "height" to it.physicalHeight, "refresh_rate" to it.refreshRate) }
+            val hdr = display.hdrCapabilities
+            m["hdr_supported"] = hdr != null && hdr.supportedHdrTypes.isNotEmpty()
+            m["hdr_types"] = hdr?.supportedHdrTypes?.toList() ?: emptyList<Int>()
+        }
         return ConnectionHandler.gson.toJsonTree(m)
     }
     
