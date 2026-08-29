@@ -271,6 +271,29 @@ class HandleCreate(val v: V0Proto, val main: OutputStream, val activities: Mutab
             return
         }
         create.createView<HardwareBufferSurfaceView>(m) {
+            it.mouseListener = object: HardwareBufferSurfaceView.MouseListener {
+                override fun onMouseEvent(action: Int, button: Int, x: Int, y: Int, time: Long) {
+                    val a = when (action) {
+                        0 -> MouseEvent.Action.down
+                        1 -> MouseEvent.Action.up
+                        else -> MouseEvent.Action.move
+                    }
+                    val b = when (button) {
+                        1 -> MouseEvent.Button.left
+                        2 -> MouseEvent.Button.right
+                        3 -> MouseEvent.Button.middle
+                        else -> MouseEvent.Button.none
+                    }
+                    eventQueue.offer(Event.newBuilder().setMouse(MouseEvent.newBuilder()
+                        .setV(View.newBuilder().setAid(m.data.aid).setId(it.id))
+                        .setAction(a)
+                        .setButton(b)
+                        .setX(x)
+                        .setY(y)
+                        .setTime(time)
+                    ).build())
+                }
+            }
             it.surfaceChangedListener = object: HardwareBufferSurfaceView.SurfaceChangedListener {
                 override fun onSurfaceChanged(width: Int, height: Int) {
                     eventQueue.offer(Event.newBuilder().setSurfaceChanged(SurfaceViewSurfaceChangedEvent.newBuilder().setV(View.newBuilder().setAid(m.data.aid).setId(it.id)).setWidth(width).setHeight(height)).build())
