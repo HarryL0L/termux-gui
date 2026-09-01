@@ -150,6 +150,7 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
     
     fun setBuffer(b: HardwareBuffer) {
         synchronized(RENDER_LOCK) {
+            android.util.Log.w("HBSurfaceView", "setBuffer: new buffer=${b.width}x${b.height}, current surface=${surfaceWidth}x${surfaceHeight}")
             buffer = b
             if (disp != EGL14.EGL_NO_DISPLAY) {
                 if (bufferImage != EGLImageKHR.EGL_NO_IMAGE_KHR) {
@@ -218,6 +219,9 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) throw RuntimeException("HardwareBufferSurfaceView used on Android < 8.0")
                 val bWidth = buffer!!.width
                 val bHeight = buffer!!.height
+                if (bWidth != surfaceWidth || bHeight != surfaceHeight) {
+                    android.util.Log.w("HBSurfaceView", "render: MISMATCH buffer=${bWidth}x${bHeight} surface=${surfaceWidth}x${surfaceHeight} (x=${config.x}, y=${config.y})")
+                }
 
                 val vertexArray = floatArrayOf(
                     -1f, -1f, // bottom left vertex
@@ -460,6 +464,7 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
         
         override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
             synchronized(RENDER_LOCK) {
+                android.util.Log.w("HBSurfaceView", "surfaceChanged: new surface=${width}x${height}, current buffer=${buffer?.width}x${buffer?.height}")
                 surfaceChangedListener?.onSurfaceChanged(width, height)
                 surfaceWidth = width
                 surfaceHeight = height
