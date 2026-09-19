@@ -18,8 +18,6 @@ import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.opengl.GLUtils
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.ViewConfiguration
@@ -76,28 +74,21 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
         fun onSurfaceFrame(timestamp: Long)
     }
 
-    /**
-     * Receives the virtual pointer events generated in trackpad mode.
-     * Coordinates are in buffer pixels.
-     */
+    /** Receives pointer events from trackpad mode, coordinates in buffer pixels. */
     interface PointerListener {
         enum class Action { MOVE, BUTTON_DOWN, BUTTON_UP, SCROLL }
         enum class Button { NONE, LEFT, RIGHT, MIDDLE }
         fun onPointer(action: Action, x: Int, y: Int, button: Button, scrollX: Float, scrollY: Float)
     }
 
-    /**
-     * Trackpad mode settings.
-     */
+    /** Trackpad mode settings. */
     class Trackpad {
         var enabled = false
         var sensitivity = 1f
         var scrollSensitivity = 1f
     }
 
-    /**
-     * Cursor image, RGBA bitmap with a hotspot.
-     */
+    /** Cursor bitmap with hotspot. */
     class CursorImage(val bitmap: Bitmap, val hotspotX: Int, val hotspotY: Int)
 
     /**
@@ -135,9 +126,7 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
     
     companion object {
 
-        /**
-         * Draws a simple arrow cursor: black arrow with a white outline.
-         */
+        /** Default arrow cursor. */
         fun defaultCursor(): CursorImage {
             val size = 24
             val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -210,7 +199,6 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
     private var tposI = -1
     private var prog = -1
 
-    // cursor rendering state
     private var cursorProg = -1
     private var cursorPosI = -1
     private var cursorTposI = -1
@@ -221,22 +209,12 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
 
     var pointerListener: PointerListener? = null
     val trackpad = Trackpad()
-    /**
-     * Whether the cursor is drawn.
-     */
     @Volatile var cursorVisible = false
-    /**
-     * Cursor position in Surface pixels.
-     */
     private var cursorX = 0f
     private var cursorY = 0f
     private var cursorImage: CursorImage = defaultCursor()
 
-    private val mainHandler = Handler(Looper.getMainLooper())
-
-    /**
-     * Sets the cursor image. Null resets to the default arrow.
-     */
+    /** Null resets to the default arrow. */
     fun setCursorImage(img: CursorImage?) {
         synchronized(RENDER_LOCK) {
             cursorImage = img ?: defaultCursor()
@@ -245,9 +223,6 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
         }
     }
 
-    /**
-     * Sets the cursor position in buffer pixels.
-     */
     fun setCursorPosition(bx: Int, by: Int) {
         synchronized(RENDER_LOCK) {
             val s = bufferToSurface(bx.toFloat(), by.toFloat())
@@ -258,9 +233,6 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
         }
     }
 
-    /**
-     * Gets the cursor position in buffer pixels.
-     */
     fun getCursorPosition(): IntArray {
         synchronized(RENDER_LOCK) {
             val b = surfaceToBuffer(cursorX, cursorY)
@@ -279,10 +251,7 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
         if (surfaceHeight > 0) cursorY = cursorY.coerceIn(0f, (surfaceHeight - 1).toFloat())
     }
 
-    /**
-     * Offset of the buffer relative to the Surface origin, according to the config.
-     * Buffer pixel = Surface pixel + offset.
-     */
+    /** Buffer pixel = Surface pixel + offset. */
     private fun bufferOffset(): FloatArray {
         val b = buffer
         var ox = 0f
@@ -314,28 +283,26 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
         l.onPointer(action, b[0].toInt(), b[1].toInt(), button, sx, sy)
     }
 
-    // ---- trackpad gesture handling ----
+    /** Trackpad gestures: drag moves, tap clicks (1/2/3 fingers = left/right/middle), two finger drag scrolls, double tap and drag holds the left button. */
 
     private val touchSlop = ViewConfiguration.get(c).scaledTouchSlop.toFloat()
-    private val longPressTimeout = ViewConfiguration.getLongPressTimeout().toLong()
+    private val tapTimeout = ViewConfiguration.getLongPressTimeout().toLong()
+    private val doubleTapTimeout = ViewConfiguration.getDoubleTapTimeout().toLong()
+    private val doubleTapSlop = ViewConfiguration.get(c).scaledDoubleTapSlop.toFloat()
 
     private var gestureLastX = 0f
     private var gestureLastY = 0f
+    private var gestureDownX = 0f
+    private var gestureDownY = 0f
     private var gestureMoved = false
     private var gestureMaxPointers = 0
     private var gestureDownTime = 0L
     private var gestureDragging = false
+    private var lastTapTime = 0L
+    private var lastTapX = 0f
+    private var lastTapY = 0f
     private var scrollAccX = 0f
     private var scrollAccY = 0f
-    private val longPressRunnable = Runnable {
-        synchronized(RENDER_LOCK) {
-            if (!gestureMoved && gestureMaxPointers == 1 && !gestureDragging) {
-                gestureDragging = true
-                emitPointer(PointerListener.Action.BUTTON_DOWN, PointerListener.Button.LEFT)
-                performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-            }
-        }
-    }
 
     private fun focusOf(e: MotionEvent): FloatArray {
         var x = 0f
@@ -360,13 +327,20 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                     val f = focusOf(event)
                     gestureLastX = f[0]
                     gestureLastY = f[1]
+                    gestureDownX = f[0]
+                    gestureDownY = f[1]
                     gestureMoved = false
                     gestureMaxPointers = 1
                     gestureDownTime = event.eventTime
-                    gestureDragging = false
                     scrollAccX = 0f
                     scrollAccY = 0f
-                    mainHandler.postDelayed(longPressRunnable, longPressTimeout)
+                    val isDoubleTap = lastTapTime != 0L
+                            && event.eventTime - lastTapTime < doubleTapTimeout
+                            && Math.abs(f[0] - lastTapX) < doubleTapSlop
+                            && Math.abs(f[1] - lastTapY) < doubleTapSlop
+                    lastTapTime = 0L
+                    gestureDragging = isDoubleTap
+                    if (isDoubleTap) emitPointer(PointerListener.Action.BUTTON_DOWN, PointerListener.Button.LEFT)
                 }
                 MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_POINTER_UP -> {
                     val f = focusOf(event)
@@ -374,22 +348,19 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                     gestureLastY = f[1]
                     if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
                         gestureMaxPointers = maxOf(gestureMaxPointers, event.pointerCount)
-                        mainHandler.removeCallbacks(longPressRunnable)
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val f = focusOf(event)
                     val dx = f[0] - gestureLastX
                     val dy = f[1] - gestureLastY
-                    if (!gestureMoved && (Math.abs(dx) > touchSlop || Math.abs(dy) > touchSlop)) {
+                    if (!gestureMoved && (Math.abs(f[0] - gestureDownX) > touchSlop || Math.abs(f[1] - gestureDownY) > touchSlop)) {
                         gestureMoved = true
-                        mainHandler.removeCallbacks(longPressRunnable)
                     }
                     if (gestureMoved) {
                         gestureLastX = f[0]
                         gestureLastY = f[1]
                         if (event.pointerCount >= 2 && !gestureDragging) {
-                            // two finger scroll: one "wheel notch" per ~40dp of movement
                             val notch = 40f * resources.displayMetrics.density / trackpad.scrollSensitivity
                             scrollAccX += dx
                             scrollAccY += dy
@@ -398,7 +369,6 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                             if (sx != 0 || sy != 0) {
                                 scrollAccX -= sx * notch
                                 scrollAccY -= sy * notch
-                                // finger moving down means content moves down = wheel scrolls up
                                 emitPointer(PointerListener.Action.SCROLL, PointerListener.Button.NONE, -sx.toFloat(), -sy.toFloat())
                             }
                         } else {
@@ -411,12 +381,11 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    mainHandler.removeCallbacks(longPressRunnable)
                     if (gestureDragging) {
                         gestureDragging = false
                         emitPointer(PointerListener.Action.BUTTON_UP, PointerListener.Button.LEFT)
                     } else if (event.actionMasked == MotionEvent.ACTION_UP && !gestureMoved
-                            && event.eventTime - gestureDownTime < longPressTimeout) {
+                            && event.eventTime - gestureDownTime < tapTimeout) {
                         val button = when (gestureMaxPointers) {
                             1 -> PointerListener.Button.LEFT
                             2 -> PointerListener.Button.RIGHT
@@ -424,13 +393,20 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                         }
                         emitPointer(PointerListener.Action.BUTTON_DOWN, button)
                         emitPointer(PointerListener.Action.BUTTON_UP, button)
+                        if (button == PointerListener.Button.LEFT) {
+                            lastTapTime = event.eventTime
+                            lastTapX = gestureDownX
+                            lastTapY = gestureDownY
+                        }
                     }
                 }
             }
         }
         return true
     }
-
+    
+    
+    
     fun setBuffer(b: HardwareBuffer) {
         synchronized(RENDER_LOCK) {
             buffer = b
@@ -602,9 +578,7 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
         }
     }
     
-    /**
-     * Draws the cursor quad on top of the buffer. Assumes the GLES context is current.
-     */
+    /** Draws the cursor on top of the buffer with the GLES context current. */
     private fun drawCursor() {
         if (!cursorVisible) return
         if (cursorProg == -1 || surfaceWidth == 0 || surfaceHeight == 0) return
@@ -630,7 +604,6 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
         }
         GLES20.glUniform1i(GLES20.glGetUniformLocation(cursorProg, "cursorSampler"), 2)
 
-        // scale the cursor with the display density so it has a sane size on high-dpi screens
         val scale = resources.displayMetrics.density
         val w = img.bitmap.width * scale
         val h = img.bitmap.height * scale
@@ -644,7 +617,6 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
         val fPos = cursorPosBuffer.asFloatBuffer()
         fPos.put(floatArrayOf(ndcL, ndcB, ndcL, ndcT, ndcR, ndcB, ndcR, ndcT))
         val fTex = cursorTposBuffer.asFloatBuffer()
-        // Bitmap rows go top to bottom, so texture v=0 is the top of the image
         fTex.put(floatArrayOf(0f, 1f, 0f, 0f, 1f, 1f, 1f, 0f))
 
         GLES20.glEnableVertexAttribArray(cursorPosI)
@@ -653,13 +625,11 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
         GLES20.glVertexAttribPointer(cursorTposI, 2, GLES20.GL_FLOAT, false, 0, cursorTposBuffer)
 
         GLES20.glEnable(GLES20.GL_BLEND)
-        // Bitmaps are premultiplied, so use premultiplied blending
         GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         logGLESError("draw cursor")
         GLES20.glDisable(GLES20.GL_BLEND)
 
-        // restore state for the buffer pass
         GLES20.glUseProgram(prog)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
     }
