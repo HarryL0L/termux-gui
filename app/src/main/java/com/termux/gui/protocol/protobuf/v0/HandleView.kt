@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.hardware.HardwareBuffer
 import android.net.Uri
@@ -761,6 +762,68 @@ class HandleView(val v: V0Proto, val main: OutputStream, val activities: Mutable
                 v.setFrameRate(m.framerate)
                 ret.success = true
             }
+        }, {
+            it.success = false
+        })
+    }
+
+    fun surfaceTrackpad(m: SurfaceViewTrackpadRequest) {
+        handler.handleView(m.v, SurfaceViewTrackpadResponse.newBuilder(), { ret, v: HardwareBufferSurfaceView, _, _ ->
+            synchronized(v.RENDER_LOCK) {
+                v.trackpad.enabled = m.enabled
+                v.trackpad.sensitivity = if (m.sensitivity > 0f) m.sensitivity else 1f
+                v.trackpad.scrollSensitivity = if (m.scrollSensitivity > 0f) m.scrollSensitivity else 1f
+                v.cursorVisible = m.enabled
+            }
+            v.requestRender()
+            ret.success = true
+        }, {
+            it.success = false
+        })
+    }
+
+    fun surfaceSetCursor(m: SurfaceViewSetCursorRequest) {
+        handler.handleView(m.v, SurfaceViewSetCursorResponse.newBuilder(), { ret, v: HardwareBufferSurfaceView, _, _ ->
+            v.cursorVisible = m.visible
+            if (m.setPosition) {
+                v.setCursorPosition(m.x, m.y)
+            } else {
+                v.requestRender()
+            }
+            ret.success = true
+        }, {
+            it.success = false
+        })
+    }
+
+    fun surfaceSetCursorImage(m: SurfaceViewSetCursorImageRequest) {
+        val ret = SurfaceViewSetCursorImageResponse.newBuilder()
+        var img: HardwareBufferSurfaceView.CursorImage? = null
+        if (!m.pixels.isEmpty) {
+            val w = m.width
+            val h = m.height
+            if (w <= 0 || h <= 0 || w > 512 || h > 512 || m.pixels.size() != w * h * 4) {
+                ret.success = false
+                ret.code = Error.IMAGE_TOO_BIG
+                ProtoUtils.write(ret, main)
+                return
+            }
+            val px = IntArray(w * h)
+            val bytes = m.pixels
+            for (i in px.indices) {
+                val o = i * 4
+                px[i] = ((bytes.byteAt(o + 3).toInt() and 0xff) shl 24) or
+                        ((bytes.byteAt(o).toInt() and 0xff) shl 16) or
+                        ((bytes.byteAt(o + 1).toInt() and 0xff) shl 8) or
+                        (bytes.byteAt(o + 2).toInt() and 0xff)
+            }
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            bmp.setPixels(px, 0, w, 0, 0, w, h)
+            img = HardwareBufferSurfaceView.CursorImage(bmp, m.hotspotX.coerceIn(0, w - 1), m.hotspotY.coerceIn(0, h - 1))
+        }
+        handler.handleView(m.v, ret, { r, v: HardwareBufferSurfaceView, _, _ ->
+            v.setCursorImage(img)
+            r.success = true
         }, {
             it.success = false
         })
