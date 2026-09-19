@@ -272,9 +272,11 @@ class ProtoUtils {
                         }
                         c.clearTouches()
                         if (event.historySize == 0) {
+                            val t = GUIProt0.TouchEvent.Touch.newBuilder()
                             for (p in pd) {
-                                c.addTouches(GUIProt0.TouchEvent.Touch.newBuilder().addPointers(GUIProt0.TouchEvent.Touch.Pointer.newBuilder().setId(p.id).setX(p.x).setY(p.y)))
+                                t.addPointers(GUIProt0.TouchEvent.Touch.Pointer.newBuilder().setId(p.id).setX(p.x).setY(p.y))
                             }
+                            c.addTouches(t)
                             eventQueue.offer(GUIProt0.Event.newBuilder().setTouch(c).build())
                         } else {
                             val pdhl = LinkedList<LinkedList<PointerData>>()
