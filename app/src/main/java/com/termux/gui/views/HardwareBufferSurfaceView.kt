@@ -346,6 +346,8 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                     val f = focusOf(event)
                     gestureLastX = f[0]
                     gestureLastY = f[1]
+                    gestureDownX = f[0]
+                    gestureDownY = f[1]
                     if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
                         gestureMaxPointers = maxOf(gestureMaxPointers, event.pointerCount)
                     }
@@ -354,7 +356,8 @@ class HardwareBufferSurfaceView(c: Context) : SurfaceView(c), Choreographer.Fram
                     val f = focusOf(event)
                     val dx = f[0] - gestureLastX
                     val dy = f[1] - gestureLastY
-                    if (!gestureMoved && (Math.abs(f[0] - gestureDownX) > touchSlop || Math.abs(f[1] - gestureDownY) > touchSlop)) {
+                    val slop = touchSlop * event.pointerCount
+                    if (!gestureMoved && (Math.abs(f[0] - gestureDownX) > slop || Math.abs(f[1] - gestureDownY) > slop)) {
                         gestureMoved = true
                     }
                     if (gestureMoved) {
