@@ -2607,6 +2607,85 @@ message SurfaceViewConfigResponse {
 }
 
 
+/*
+Enables or disables trackpad mode on a SurfaceView.
+In trackpad mode touches on the SurfaceView are not reported as TouchEvents, but are translated
+into the movement of a virtual pointer (cursor) and reported as PointerEvents:
+  - one finger drag: moves the cursor relative to the finger movement
+  - one finger tap: left click at the cursor position
+  - one finger long press: starts a left button drag, released when the finger is lifted
+  - two finger tap: right click
+  - two finger drag: scroll
+  - three finger tap: middle click
+The cursor is drawn by the plugin on top of the buffer contents, so it moves with the touch
+input independently from the framerate of the client.
+ */
+message SurfaceViewTrackpadRequest {
+  View v = 1;
+  bool enabled = 2;
+  /*
+  Multiplier for translating finger movement to cursor movement. 0 or less uses the default (1.0).
+   */
+  float sensitivity = 3;
+  /*
+  Multiplier for translating two finger movement to scroll units. 0 or less uses the default.
+   */
+  float scrollSensitivity = 4;
+}
+
+message SurfaceViewTrackpadResponse {
+  bool success = 1;
+  Error code = 2;
+}
+
+/*
+Shows, hides or moves the cursor of a SurfaceView.
+Coordinates are in buffer pixels, the same as reported by PointerEvents.
+ */
+message SurfaceViewSetCursorRequest {
+  View v = 1;
+  /*
+  Whether the cursor is drawn.
+   */
+  bool visible = 2;
+  /*
+  If true, the cursor is moved to x, y.
+   */
+  bool setPosition = 3;
+  int32 x = 4;
+  int32 y = 5;
+}
+
+message SurfaceViewSetCursorResponse {
+  bool success = 1;
+  Error code = 2;
+}
+
+/*
+Sets the image used for the cursor of a SurfaceView, so clients can forward cursor shape changes
+(i.e. an I-beam over a text field). If pixels is empty, the built-in arrow cursor is used.
+ */
+message SurfaceViewSetCursorImageRequest {
+  View v = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  /*
+  The point in the image that is the actual pointer position.
+   */
+  uint32 hotspotX = 4;
+  uint32 hotspotY = 5;
+  /*
+  width*height*4 bytes of non-premultiplied RGBA8888 pixels, row-major from the top-left.
+   */
+  bytes pixels = 6;
+}
+
+message SurfaceViewSetCursorImageResponse {
+  bool success = 1;
+  Error code = 2;
+}
+
+
 
 message Method {
   oneof method {
@@ -2759,6 +2838,9 @@ message Method {
     DestroyHardwareBufferRequest destroyHardwareBuffer = 701;
     SurfaceViewSetBufferRequest setSurfaceBuffer = 702;
     SurfaceViewConfigRequest surfaceConfig = 703;
+    SurfaceViewTrackpadRequest surfaceTrackpad = 704;
+    SurfaceViewSetCursorRequest surfaceSetCursor = 705;
+    SurfaceViewSetCursorImageRequest surfaceSetCursorImage = 706;
     
     
   }
@@ -3174,6 +3256,44 @@ message InsetEvent {
 }
 
 
+/*
+Send by a SurfaceView in trackpad mode when the virtual pointer moves, clicks or scrolls.
+ */
+message PointerEvent {
+  View v = 1;
+  enum Action {
+    /*
+    The cursor moved. Also send while a button is held (drag).
+     */
+    move = 0;
+    buttonDown = 1;
+    buttonUp = 2;
+    scroll = 3;
+  }
+  enum Button {
+    none = 0;
+    left = 1;
+    right = 2;
+    middle = 3;
+  }
+  Action action = 2;
+  /*
+  Cursor position in buffer pixels.
+   */
+  int32 x = 3;
+  int32 y = 4;
+  /*
+  The button for buttonDown/buttonUp.
+   */
+  Button button = 5;
+  /*
+  Scroll deltas for scroll events. Positive y scrolls down (content moves up), like a mouse wheel.
+   */
+  float scrollX = 6;
+  float scrollY = 7;
+}
+
+
 // Debug events
 
 
@@ -3220,6 +3340,7 @@ message Event {
     VolumeKeyEvent volume = 50;
     InsetEvent inset = 51;
     SurfaceViewSurfaceChangedEvent surfaceChanged = 52;
+    PointerEvent pointer = 53;
     
     // Debug events
     
