@@ -281,6 +281,24 @@ class HandleCreate(val v: V0Proto, val main: OutputStream, val activities: Mutab
                     eventQueue.offer(Event.newBuilder().setFrameComplete(SurfaceViewFrameCompleteEvent.newBuilder().setV(View.newBuilder().setAid(m.data.aid).setId(it.id)).setTimestamp(timestamp)).build())
                 }
             }
+            it.pointerListener = object: HardwareBufferSurfaceView.PointerListener {
+                override fun onPointer(action: HardwareBufferSurfaceView.PointerListener.Action, x: Int, y: Int, button: HardwareBufferSurfaceView.PointerListener.Button, scrollX: Float, scrollY: Float) {
+                    val e = PointerEvent.newBuilder().setV(View.newBuilder().setAid(m.data.aid).setId(it.id)).setX(x).setY(y).setScrollX(scrollX).setScrollY(scrollY)
+                    e.action = when (action) {
+                        HardwareBufferSurfaceView.PointerListener.Action.MOVE -> PointerEvent.Action.move
+                        HardwareBufferSurfaceView.PointerListener.Action.BUTTON_DOWN -> PointerEvent.Action.buttonDown
+                        HardwareBufferSurfaceView.PointerListener.Action.BUTTON_UP -> PointerEvent.Action.buttonUp
+                        HardwareBufferSurfaceView.PointerListener.Action.SCROLL -> PointerEvent.Action.scroll
+                    }
+                    e.button = when (button) {
+                        HardwareBufferSurfaceView.PointerListener.Button.NONE -> PointerEvent.Button.none
+                        HardwareBufferSurfaceView.PointerListener.Button.LEFT -> PointerEvent.Button.left
+                        HardwareBufferSurfaceView.PointerListener.Button.RIGHT -> PointerEvent.Button.right
+                        HardwareBufferSurfaceView.PointerListener.Button.MIDDLE -> PointerEvent.Button.middle
+                    }
+                    eventQueue.offer(Event.newBuilder().setPointer(e).build())
+                }
+            }
             if (m.keyboard) {
                 it.focusable = android.view.View.FOCUSABLE
                 it.isFocusableInTouchMode = true
