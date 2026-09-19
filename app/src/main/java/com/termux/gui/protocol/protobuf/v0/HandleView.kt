@@ -808,7 +808,6 @@ class HandleView(val v: V0Proto, val main: OutputStream, val activities: Mutable
                 ProtoUtils.write(ret, main)
                 return
             }
-            // setPixels takes non-premultiplied ARGB and premultiplies, so the texture matches the default cursor
             val px = IntArray(w * h)
             val bytes = m.pixels
             for (i in px.indices) {
